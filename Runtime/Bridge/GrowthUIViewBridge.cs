@@ -87,23 +87,39 @@ namespace NiumaGrowth.Bridge
             }
 
             var revision = growthController.GrowthRevision;
-            var data = new GrowthPanelViewData
+            GrowthPanelViewData data;
+            try
             {
-                ActorId = actorId,
-                Revision = revision,
-                Skills = growthController.GetAllProgress(actorId, includeNotStarted)
-            };
-
-            _observedRevision = revision;
-            if (data.Skills == null || data.Skills.Length == 0)
+                data = new GrowthPanelViewData
+                {
+                    ActorId = actorId,
+                    Revision = revision,
+                    Skills = growthController.GetAllProgress(actorId, includeNotStarted)
+                };
+            }
+            catch (Exception exception)
             {
-                ApplyClearUpdate();
+                _observedRevision = -1L;
+                _refreshRequested = true;
+                if (logWarnings)
+                {
+                    Debug.LogError($"[NiumaGrowthUIBridge] 构建成长 UI 数据失败：{exception.Message}", this);
+                }
                 return;
             }
 
-            _hadPanelData = true;
-            ApplyRawUpdate(new GrowthUIUpdate(GrowthUIUpdateType.Refresh, revision, data, _lastPanelData));
-            _lastPanelData = data;
+            if (data.Skills == null || data.Skills.Length == 0)
+            {
+                ApplyClearUpdate(revision);
+                return;
+            }
+
+            if (ApplyRawUpdate(new GrowthUIUpdate(GrowthUIUpdateType.Refresh, revision, data, _lastPanelData)))
+            {
+                _observedRevision = revision;
+                _hadPanelData = true;
+                _lastPanelData = data;
+            }
         }
 
         public void SetActorId(string value)
@@ -118,24 +134,32 @@ namespace NiumaGrowth.Bridge
             RequestRefresh();
         }
 
-        private void ApplyClearUpdate()
+        private void ApplyClearUpdate(long revision = -1L)
         {
-            _observedRevision = growthController != null ? growthController.GrowthRevision : -1L;
-            if (!notifyWhenCleared && !_hadPanelData) return;
-            ApplyRawUpdate(new GrowthUIUpdate(GrowthUIUpdateType.Cleared, _observedRevision, null, _lastPanelData));
-            _lastPanelData = null;
-            _hadPanelData = false;
+            var targetRevision = revision >= 0L ? revision : (growthController != null ? growthController.GrowthRevision : -1L);
+            if (!notifyWhenCleared && !_hadPanelData)
+            {
+                _observedRevision = targetRevision;
+                return;
+            }
+
+            if (ApplyRawUpdate(new GrowthUIUpdate(GrowthUIUpdateType.Cleared, targetRevision, null, _lastPanelData)))
+            {
+                _observedRevision = targetRevision;
+                _lastPanelData = null;
+                _hadPanelData = false;
+            }
         }
 
-        private void ApplyRawUpdate(GrowthUIUpdate update)
+        private bool ApplyRawUpdate(GrowthUIUpdate update)
         {
             _receiver = ResolveReceiver(true);
-            if (_receiver == null) return;
+            if (_receiver == null) return true;
             if (_isApplyingUpdate)
             {
                 _refreshRequested = true;
                 if (logWarnings) Debug.LogWarning("[NiumaGrowthUIBridge] 检测到 UI 刷新回流，已延后到下一帧。", this);
-                return;
+                return false;
             }
 
             var revisionBefore = growthController != null ? growthController.GrowthRevision : update.Revision;
@@ -143,6 +167,16 @@ namespace NiumaGrowth.Bridge
             {
                 _isApplyingUpdate = true;
                 _receiver.ApplyGrowthUpdate(update);
+            }
+            catch (Exception exception)
+            {
+                _observedRevision = -1L;
+                _refreshRequested = true;
+                if (logWarnings)
+                {
+                    Debug.LogError($"[NiumaGrowthUIBridge] UI 接收端处理成长数据失败：{exception.Message}", this);
+                }
+                return false;
             }
             finally
             {
@@ -153,7 +187,10 @@ namespace NiumaGrowth.Bridge
             {
                 _observedRevision = -1L;
                 _refreshRequested = true;
+                return false;
             }
+
+            return true;
         }
 
         private void RequestRefresh()
