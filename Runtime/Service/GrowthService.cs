@@ -270,6 +270,8 @@ namespace NiumaGrowth.Service
                 var skills = new List<GrowthProgressSnapshot>();
                 foreach (var skillPair in actorPair.Value)
                 {
+                    // 第一版把 TotalExp=0 视为“没有成长事实”，不写入存档。
+                    // 如果后续需要区分“从未接触”和“接触过但经验为 0”，需要增加显式状态字段。
                     if (skillPair.Value == null || skillPair.Value.TotalExp <= 0)
                     {
                         continue;
@@ -307,7 +309,7 @@ namespace NiumaGrowth.Service
             for (var i = 0; i < snapshot.Owners.Length; i++)
             {
                 var owner = snapshot.Owners[i];
-                if (owner == null || string.IsNullOrWhiteSpace(owner.ActorId) || owner.Skills == null)
+                if (owner == null || string.IsNullOrWhiteSpace(owner.ActorId) || owner.Skills == null || owner.Skills.Length == 0)
                 {
                     return GrowthOperationResult.Failed(GrowthFailureReason.ImportInvalid, null, null, $"成长存档 Owners[{i}] 数据无效。");
                 }

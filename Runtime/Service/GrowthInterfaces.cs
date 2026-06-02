@@ -1,3 +1,4 @@
+using NiumaCore.Event;
 using NiumaGrowth.Config;
 using NiumaGrowth.Data;
 
@@ -42,5 +43,6 @@ namespace NiumaGrowth.Service
     public interface IGrowthConfigurationService
     {
         void SetDefinitions(GrowthSkillDefinition[] definitions);
+        void SetEventBus(IEventBus eventBus);
     }
 }
