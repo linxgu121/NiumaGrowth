@@ -15,7 +15,7 @@ namespace NiumaGrowth.Bridge
         [Tooltip("成长模块根控制器。请拖入场景中的 NiumaGrowthController；为空时可自动查找。")]
         [SerializeField] private NiumaGrowthController growthController;
 
-        [Tooltip("实现 IGrowthUIReceiver 的 UI 组件。")]
+        [Tooltip("成长面板 UI 脚本。拖团队制作的 Growth 面板脚本；该脚本负责显示技艺等级和经验。当前模块未内置正式面板，未制作 UI 时可留空。")]
         [SerializeField] private MonoBehaviour growthUIReceiverProvider;
 
         [Header("刷新策略")]
@@ -234,7 +234,7 @@ namespace NiumaGrowth.Bridge
             var receiver = growthUIReceiverProvider as IGrowthUIReceiver;
             if (receiver == null && growthUIReceiverProvider != null && logWarnings && logMissing)
             {
-                Debug.LogWarning("[NiumaGrowthUIBridge] Receiver Provider 没有实现 IGrowthUIReceiver。", this);
+                Debug.LogWarning("[NiumaGrowthUIBridge] Growth UI Receiver 绑定的不是成长面板脚本，请拖团队制作的 Growth 面板脚本。", this);
             }
 
             return receiver;
