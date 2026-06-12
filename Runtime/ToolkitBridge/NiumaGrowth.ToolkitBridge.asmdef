@@ -1,0 +1,25 @@
+﻿{
+    "name":  "NiumaGrowth.ToolkitBridge",
+    "references":  [
+                       "NiumaGrowth.Runtime",
+                       "NiumaUI.Runtime"
+                   ],
+    "includePlatforms":  [
+
+                         ],
+    "excludePlatforms":  [
+
+                         ],
+    "allowUnsafeCode":  false,
+    "overrideReferences":  false,
+    "precompiledReferences":  [
+
+                              ],
+    "autoReferenced":  true,
+    "defineConstraints":  [
+
+                          ],
+    "versionDefines":  [
+
+                       ]
+}
