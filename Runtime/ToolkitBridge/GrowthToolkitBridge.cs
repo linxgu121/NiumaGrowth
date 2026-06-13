@@ -1,5 +1,8 @@
-﻿using NiumaGrowth.Data;
+using System;
+using System.Collections.Generic;
+using NiumaGrowth.Data;
 using NiumaUI.Toolkit;
+using NiumaUI.Toolkit.Common;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -11,33 +14,51 @@ namespace NiumaGrowth.Bridge
         private UIToolkitUIManager uiManager;
         [SerializeField, Tooltip("成长面板 ViewId。默认 GrowthPanel，需要在 UIToolkitViewRegistrySO 注册。")]
         private string growthViewId = "GrowthPanel";
-        [SerializeField] private bool autoOpenView = true;
-        [SerializeField] private bool closeOnCleared = true;
-        [SerializeField] private bool logWarnings = true;
+        [SerializeField, Tooltip("刷新失败时是否自动打开成长面板。")]
+        private bool autoOpenView = true;
+        [SerializeField, Tooltip("收到 Cleared 更新时是否关闭成长面板。关闭后会立即返回，不再重新打开。")]
+        private bool closeOnCleared = true;
+        [SerializeField, Tooltip("缺少 UIManager 或 View 时是否输出警告。")]
+        private bool logWarnings = true;
 
         public void ApplyGrowthUpdate(GrowthUIUpdate update)
         {
-            if (update.UpdateType == GrowthUIUpdateType.Cleared && closeOnCleared && uiManager != null) uiManager.CloseView(growthViewId);
-            if (!EnsureUIManager()) return;
+            if (update.UpdateType == GrowthUIUpdateType.Cleared && closeOnCleared && uiManager != null)
+            {
+                uiManager.CloseView(growthViewId);
+                return;
+            }
+
+            if (!EnsureUIManager())
+                return;
+
             var refreshed = uiManager.RefreshView(growthViewId, update);
-            if (!refreshed && autoOpenView) refreshed = uiManager.OpenView(growthViewId, update);
-            if (!refreshed) Warn($"没有刷新到成长 Toolkit View：ViewId={growthViewId}。请检查 Registry 和 BindingProvider。");
+            if (!refreshed && autoOpenView)
+                refreshed = uiManager.OpenView(growthViewId, update);
+
+            if (!refreshed)
+                Warn($"没有刷新到成长 Toolkit View：ViewId={growthViewId}。请检查 Registry 和 BindingProvider。");
         }
 
         private bool EnsureUIManager()
         {
-            if (uiManager == null) uiManager = FindSceneObject<UIToolkitUIManager>();
-            if (uiManager != null) return true;
+            if (uiManager == null)
+                uiManager = FindSceneObject<UIToolkitUIManager>();
+
+            if (uiManager != null)
+                return true;
+
             Warn("未绑定 UIToolkitUIManager，成长 Toolkit 面板无法刷新。");
             return false;
         }
 
         private void Warn(string message)
         {
-            if (logWarnings && !string.IsNullOrWhiteSpace(message)) UnityEngine.Debug.LogWarning($"[GrowthToolkitReceiver] {message}", this);
+            if (logWarnings && !string.IsNullOrWhiteSpace(message))
+                UnityEngine.Debug.LogWarning($"[GrowthToolkitReceiver] {message}", this);
         }
 
-        private static T FindSceneObject<T>() where T : Object
+        private static T FindSceneObject<T>() where T : UnityEngine.Object
         {
 #if UNITY_2023_1_OR_NEWER
             return FindFirstObjectByType<T>();
@@ -47,76 +68,234 @@ namespace NiumaGrowth.Bridge
         }
     }
 
-    public sealed class GrowthToolkitBindingProvider : MonoBehaviour, IToolkitViewBindingProvider
+    public sealed class GrowthToolkitBindingProvider : ToolkitViewBindingProviderBase
     {
-        [SerializeField, Tooltip("BindingProviderId，默认 GrowthPanel。需要和 Registry 一致。")]
-        private string providerId = "GrowthPanel";
-        [SerializeField] private string titleLabelName = "TitleText";
-        [SerializeField] private string statusLabelName = "StatusText";
-        [SerializeField] private string listRootName = "ListRoot";
-        [SerializeField] private string detailLabelName = "DetailText";
-        [SerializeField] private string resultLabelName = "ResultText";
-        [SerializeField] private string emptyRootName = "EmptyRoot";
-        [SerializeField] private int maxRows = 80;
-        [SerializeField] private string rowClass = "niuma-growth-row";
+        [Header("元素名称")]
+        [SerializeField, Tooltip("标题 Label 的 name。默认 TitleText。")]
+        private string titleLabelName = "TitleText";
+        [SerializeField, Tooltip("状态 Label 的 name。默认 StatusText。")]
+        private string statusLabelName = "StatusText";
+        [SerializeField, Tooltip("成长列表 ListView 的 name。默认 ListRoot。")]
+        private string listViewName = "ListRoot";
+        [SerializeField, Tooltip("详情 Label 的 name。用于显示当前选中技艺。")]
+        private string detailLabelName = "DetailText";
+        [SerializeField, Tooltip("结果 Label 的 name。成长面板通常留空。")]
+        private string resultLabelName = "ResultText";
+        [SerializeField, Tooltip("空状态节点的 name。没有成长数据时显示。")]
+        private string emptyRootName = "EmptyRoot";
 
-        public string ProviderId => string.IsNullOrWhiteSpace(providerId) ? "GrowthPanel" : providerId.Trim();
-        public IToolkitViewBinding CreateBinding() => new GrowthToolkitBinding(titleLabelName, statusLabelName, listRootName, detailLabelName, resultLabelName, emptyRootName, maxRows, rowClass);
+        [Header("列表")]
+        [SerializeField, Tooltip("最多显示多少行。")]
+        private int maxRows = 80;
+        [SerializeField, Tooltip("列表行 USS class。")]
+        private string rowClass = "niuma-growth-row";
+        [SerializeField, Tooltip("选中行 USS class。")]
+        private string selectedRowClass = "is-selected";
+        [SerializeField, Tooltip("禁用行 USS class。")]
+        private string disabledRowClass = "is-disabled";
+
+        protected override string DefaultProviderId => "GrowthPanel";
+
+        public override IToolkitViewBinding CreateBinding()
+        {
+            return new GrowthToolkitBinding(
+                titleLabelName,
+                statusLabelName,
+                listViewName,
+                detailLabelName,
+                resultLabelName,
+                emptyRootName,
+                maxRows,
+                rowClass,
+                selectedRowClass,
+                disabledRowClass);
+        }
     }
 
-    public sealed class GrowthToolkitBinding : ToolkitViewBindingBase
+    public sealed class GrowthToolkitViewModel : UIPanelViewModelBase
     {
-        private readonly string _titleName, _statusName, _listName, _detailName, _resultName, _emptyName, _rowClass;
-        private readonly int _maxRows;
-        private Label _title, _status, _detail, _result;
-        private VisualElement _list, _empty;
+        public readonly List<ToolkitTextRowData> Rows = new List<ToolkitTextRowData>();
+        public GrowthPanelViewData Panel { get; private set; }
+        public GrowthUIUpdateType UpdateType { get; private set; }
+        public long Revision { get; private set; }
+        public string SelectedSkillId { get; private set; }
+        public GrowthProgressViewData SelectedSkill { get; private set; }
 
-        public GrowthToolkitBinding(string titleName, string statusName, string listName, string detailName, string resultName, string emptyName, int maxRows, string rowClass)
+        public void Apply(GrowthUIUpdate update, int maxRows)
         {
-            _titleName = titleName; _statusName = statusName; _listName = listName; _detailName = detailName; _resultName = resultName; _emptyName = emptyName;
-            _maxRows = Mathf.Max(1, maxRows);
-            _rowClass = string.IsNullOrWhiteSpace(rowClass) ? "niuma-growth-row" : rowClass.Trim();
+            Panel = update.Current;
+            UpdateType = update.UpdateType;
+            Revision = update.Revision;
+            SetContext(Panel?.ActorId);
+            SelectedSkillId = NormalizeSelection(Panel, SelectedSkillId);
+            RebuildRows(maxRows);
+            MarkDirty();
         }
 
-        protected override void OnInitialize()
+        public void Select(string skillId)
         {
-            _title = QL(_titleName); _status = QL(_statusName); _list = QE(_listName); _detail = QL(_detailName); _result = QL(_resultName); _empty = QE(_emptyName);
-            Apply(null, GrowthUIUpdateType.Cleared, 0);
+            SelectedSkillId = string.IsNullOrWhiteSpace(skillId) ? null : skillId.Trim();
+            RebuildRows(int.MaxValue);
+            MarkDirty();
         }
 
-        protected override void OnRefresh(object viewData)
+        protected override void OnClear(UIViewModelClearReason reason)
         {
-            if (viewData is GrowthUIUpdate update) Apply(update.Current, update.UpdateType, update.Revision);
-            else Apply(null, GrowthUIUpdateType.Cleared, 0);
+            Panel = null;
+            UpdateType = GrowthUIUpdateType.Cleared;
+            Revision = 0;
+            SelectedSkillId = null;
+            SelectedSkill = null;
+            Rows.Clear();
         }
 
-        protected override void OnClose() => Apply(null, GrowthUIUpdateType.Cleared, 0);
-
-        private void Apply(GrowthPanelViewData panel, GrowthUIUpdateType updateType, long revision)
+        private void RebuildRows(int maxRows)
         {
-            Clear();
-            var skills = panel?.Skills ?? System.Array.Empty<GrowthProgressViewData>();
-            Set(_title, "成长");
-            SetVisible(_empty, panel == null || skills.Length == 0);
-            Set(_status, panel == null ? $"状态：{updateType}" : $"Actor {Text(panel.ActorId, "未知")} | Revision {panel.Revision} | 技艺 {skills.Length}");
-            Set(_detail, panel == null ? "暂无成长数据。" : "等级由 TotalExp 和当前配置阈值实时计算，UI 不保存等级事实。");
-            Set(_result, string.Empty);
-
-            for (var i = 0; i < skills.Length && i < _maxRows; i++)
+            Rows.Clear();
+            SelectedSkill = null;
+            var skills = Panel?.Skills ?? Array.Empty<GrowthProgressViewData>();
+            var rowsLeft = Math.Max(1, maxRows);
+            for (var i = 0; i < skills.Length && rowsLeft > 0; i++)
             {
-                var s = skills[i];
-                if (s == null) continue;
-                var exp = s.IsMaxLevel ? $"总经验 {s.TotalExp} | 满级" : $"{s.ExpInCurrentLevel}/{s.ExpToNextLevel} ({s.Progress01:P0}) | 总经验 {s.TotalExp}";
-                Add($"{Text(s.DisplayName, s.SkillId)} Lv.{s.Level} [{s.Category}] | {exp}{(s.IsInheritable ? " | 可继承" : string.Empty)}{(s.IsMissingDefinition ? " | 缺失定义" : string.Empty)}");
+                var skill = skills[i];
+                if (skill == null)
+                    continue;
+
+                var id = string.IsNullOrWhiteSpace(skill.SkillId) ? $"growth:{i}" : skill.SkillId.Trim();
+                var isSelected = string.Equals(SelectedSkillId, id, StringComparison.Ordinal);
+                if (isSelected)
+                    SelectedSkill = skill;
+
+                var exp = skill.IsMaxLevel ? $"总经验 {skill.TotalExp} | 满级" : $"{skill.ExpInCurrentLevel}/{skill.ExpToNextLevel} ({skill.Progress01:P0}) | 总经验 {skill.TotalExp}";
+                var flags = $"{(skill.IsInheritable ? " | 可继承" : string.Empty)}{(skill.IsMissingDefinition ? " | 缺失定义" : string.Empty)}";
+                Rows.Add(new ToolkitTextRowData(id, $"{Text(skill.DisplayName, skill.SkillId)} Lv.{skill.Level} [{skill.Category}] | {exp}{flags}", isSelected, !skill.IsMissingDefinition, skill));
+                rowsLeft--;
             }
         }
 
-        private Label QL(string name) => string.IsNullOrWhiteSpace(name) ? null : Query<Label>(name.Trim());
-        private VisualElement QE(string name) => string.IsNullOrWhiteSpace(name) ? null : Root?.Q<VisualElement>(name.Trim());
-        private void Clear() { if (_list != null) _list.Clear(); }
-        private void Add(string text) { if (_list == null) return; var row = new Label(text ?? string.Empty); row.AddToClassList(_rowClass); _list.Add(row); }
-        private static void Set(Label label, string text) { if (label != null) label.text = text ?? string.Empty; }
-        private static void SetVisible(VisualElement element, bool visible) { if (element != null) element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None; }
-        private static string Text(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback ?? string.Empty : value;
+        private static string NormalizeSelection(GrowthPanelViewData panel, string previous)
+        {
+            var skills = panel?.Skills ?? Array.Empty<GrowthProgressViewData>();
+            if (!string.IsNullOrWhiteSpace(previous))
+            {
+                for (var i = 0; i < skills.Length; i++)
+                {
+                    if (string.Equals(skills[i]?.SkillId, previous, StringComparison.Ordinal))
+                        return previous.Trim();
+                }
+            }
+
+            return skills.Length > 0 ? skills[0]?.SkillId : null;
+        }
+
+        private static string Text(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback ?? string.Empty : value;
+        }
+    }
+
+    public sealed class GrowthToolkitBinding : ToolkitViewBindingBase<GrowthUIUpdate, GrowthToolkitViewModel>
+    {
+        private readonly string _titleName;
+        private readonly string _statusName;
+        private readonly string _listName;
+        private readonly string _detailName;
+        private readonly string _resultName;
+        private readonly string _emptyName;
+        private readonly int _maxRows;
+        private readonly string _rowClass;
+        private readonly string _selectedClass;
+        private readonly string _disabledClass;
+        private readonly ToolkitListBinding<ToolkitTextRowData> _listBinding = new ToolkitListBinding<ToolkitTextRowData>();
+        private Label _title;
+        private Label _status;
+        private Label _detail;
+        private Label _result;
+
+        public GrowthToolkitBinding(
+            string titleName,
+            string statusName,
+            string listName,
+            string detailName,
+            string resultName,
+            string emptyName,
+            int maxRows,
+            string rowClass,
+            string selectedClass,
+            string disabledClass)
+        {
+            _titleName = titleName;
+            _statusName = statusName;
+            _listName = listName;
+            _detailName = detailName;
+            _resultName = resultName;
+            _emptyName = emptyName;
+            _maxRows = Mathf.Max(1, maxRows);
+            _rowClass = string.IsNullOrWhiteSpace(rowClass) ? "niuma-growth-row" : rowClass.Trim();
+            _selectedClass = selectedClass;
+            _disabledClass = disabledClass;
+        }
+
+        protected override void OnInitializeTyped()
+        {
+            _title = QLabel(_titleName);
+            _status = QLabel(_statusName);
+            _detail = QLabel(_detailName);
+            _result = QLabel(_resultName);
+            _listBinding.Bind(Root, _listName, new ToolkitTextRowItemBinder(_rowClass, _selectedClass, _disabledClass, HandleRowClicked), _emptyName);
+            ApplyVisualState(ViewModel);
+        }
+
+        protected override void OnRefreshTyped(GrowthUIUpdate viewData, GrowthToolkitViewModel viewModel)
+        {
+            viewModel.Apply(viewData, _maxRows);
+            ApplyVisualState(viewModel);
+        }
+
+        protected override void OnClearTyped(UIViewModelClearReason reason)
+        {
+            _listBinding.Clear();
+            ApplyVisualState(ViewModel);
+        }
+
+        protected override void OnDisposeTyped()
+        {
+            _listBinding.Dispose();
+        }
+
+        private void HandleRowClicked(ToolkitTextRowData row)
+        {
+            if (row == null)
+                return;
+
+            ViewModel.Select(row.Id);
+            ApplyVisualState(ViewModel);
+        }
+
+        private void ApplyVisualState(GrowthToolkitViewModel viewModel)
+        {
+            var panel = viewModel?.Panel;
+            SetText(_title, "成长");
+            SetText(_status, panel == null
+                ? $"状态：{viewModel?.UpdateType ?? GrowthUIUpdateType.Cleared}"
+                : $"Actor {Text(panel.ActorId, "未知")} | Revision {panel.Revision} | 技艺 {panel.Skills?.Length ?? 0}");
+            SetText(_detail, viewModel?.SelectedSkill != null ? Detail(viewModel.SelectedSkill) : panel == null ? "暂无成长数据。" : "未选择技艺。");
+            SetText(_result, string.Empty);
+            _listBinding.ReplaceAll(viewModel?.Rows ?? new List<ToolkitTextRowData>());
+        }
+
+        private static string Detail(GrowthProgressViewData skill)
+        {
+            if (skill == null)
+                return "未选择技艺。";
+
+            var exp = skill.IsMaxLevel ? "满级" : $"本级 {skill.ExpInCurrentLevel}/{skill.ExpToNextLevel} ({skill.Progress01:P0})";
+            return $"选中：{Text(skill.DisplayName, skill.SkillId)}\n等级：Lv.{skill.Level}\n分类：{skill.Category}\n经验：{exp}\n总经验：{skill.TotalExp}\n说明：{skill.Description}".Trim();
+        }
+
+        private static string Text(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback ?? string.Empty : value;
+        }
     }
 }
